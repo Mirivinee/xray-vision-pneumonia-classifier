@@ -1,0 +1,29 @@
+# Python environments and cache
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Dataset copies and downloads (keep images outside the repository)
+/data/
+/dataset/
+/datasets/
+/.cache/
+**/.cache/kagglehub/
+*.zip
+
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+kaggle.json
+.kaggle/
+
+# Generated model artifacts
+*.pt
+*.pth
+*.ckpt
+*.onnx
