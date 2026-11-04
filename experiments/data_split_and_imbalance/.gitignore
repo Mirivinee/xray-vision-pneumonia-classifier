@@ -1,0 +1,9 @@
+manifests/
+runs/
+quarantine/
+*.pt
+*.pth
+*.ckpt
+*.csv
+*.json
+__pycache__/

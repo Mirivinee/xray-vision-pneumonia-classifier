@@ -65,6 +65,36 @@ Inspection checks folder structure, class counts, class balance, formats, dimens
 
 The inspection also runs a lightweight 8 × 8 average-hash screen for possible visual near-duplicates. Its candidates are not confirmed leakage: hashes can collide, and the screen cannot establish patient-level separation.
 
+## Duplicate audit (safe dry-run)
+
+Use [data/audit_duplicates.py](data/audit_duplicates.py) to report exact byte matches and possible visual matches. It uses SHA-256 for exact groups and a 32 × 32 grayscale DCT pHash for candidates. The default Hamming threshold is `0`; the CSV records the algorithm and threshold. pHash rows are informational candidates only: no image-review step is required for split creation, and candidates are never quarantined.
+
+```powershell
+& $python .\data\audit_duplicates.py --dataset-dir "D:\path\to\dataset"
+```
+
+The audit writes `data\duplicate_audit.csv`, with one inventory row per scanned image plus separate exact and perceptual group rows. Before applying an exact quarantine, check the exact same-label keeper/redundant proposals. Cross-label exact groups are not proposed for movement.
+
+To apply only the safe exact same-label proposals, use the explicit flag and type `QUARANTINE` at the prompt. This has not been run on the dataset:
+
+```powershell
+& $python .\data\audit_duplicates.py --dataset-dir "D:\path\to\dataset" --apply
+```
+
+Files are moved to a quarantine directory with `quarantine_manifest.csv`, never permanently deleted. Restore them with:
+
+```powershell
+& $python .\data\audit_duplicates.py --restore-manifest "D:\path\to\quarantine\quarantine_manifest.csv"
+```
+
+The audit does not change official splits. Perceptual matches are candidates only, remain in the CSV report, and do not block split creation; the split utility groups only exact SHA-256 matches.
+
+Synthetic audit tests can be run with:
+
+```powershell
+& $python -m unittest discover -s tests -v
+```
+
 ## Create batches
 
 ```python
@@ -103,3 +133,7 @@ Run `data\verify_data_pipeline.py` to check train and validation batches, finite
 ## Data safety
 
 Do not copy or commit X-ray images, the KaggleHub cache, credentials, virtual environments, checkpoints, or other generated artifacts. [.gitignore](.gitignore) excludes common local data and generated-file paths.
+
+## Split and training experiments
+
+The separate 80/10/10 split, imbalance experiments, model handoff, checkpoint/history output, and test evaluation instructions are in [experiments/data_split_and_imbalance/README.md](experiments/data_split_and_imbalance/README.md). Use test evaluation only after model selection is complete.
