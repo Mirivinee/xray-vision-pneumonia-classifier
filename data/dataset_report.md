@@ -120,6 +120,10 @@ Found **30 exact duplicate group(s)** using SHA-256 of file bytes. **0 group(s) 
   - `train/PNEUMONIA/person834_bacteria_2747.jpeg`
   - `train/PNEUMONIA/person834_bacteria_2748.jpeg`
 
+## Day 2 perceptual-hash screening
+
+A lightweight 8 × 8 average hash produced **292 candidate group(s)**, including **66 candidate group(s) spanning splits**. These are screening results only: average-hash collisions are possible, and this method cannot establish patient-level separation or detect every visually similar image.
+
 ## Folder checks
 
 All expected `train`, `val`, `test` and `NORMAL`, `PNEUMONIA` folders are present.
@@ -131,4 +135,7 @@ All expected `train`, `val`, `test` and `NORMAL`, `PNEUMONIA` folders are presen
 - The loader exposes train and validation by default; the test loader is opt-in for final evaluation only.
 - Duplicate findings are reports only. The existing splits are retained unchanged.
 - Team should review any cross-split duplicates before model evaluation; do not alter splits without agreement.
+- Day 2 handoff: Anurag and Suraj should confirm that 224 × 224 RGB inputs, values in [0, 1], and no initial random augmentation match their model expectations before training.
+- Data utilities are organized under `data/`; the root `data.py` is only a compatibility wrapper.
+- No scratch-CNN or transfer-learning model files were present, so model-specific compatibility was not tested. The documented loader contract is `[batch, 3, 224, 224]` float32 images and `[batch]` labels.
 - Local Windows loader verification was blocked by an Application Control policy preventing PyTorch's native `torch._C` DLL from loading. The recorded Google Colab verification produced image shape `[4, 3, 224, 224]`, `float32` tensors with values in `[0, 1]`, and label shape `[4]`; that run exposed only `train` and `val` by default, with test loading opt-in and not verified there.

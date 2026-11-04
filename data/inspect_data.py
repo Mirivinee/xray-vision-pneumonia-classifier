@@ -5,9 +5,13 @@ import hashlib
 from collections import Counter, defaultdict
 from pathlib import Path
 
+import numpy as np
 from PIL import Image
 
-from data_pipeline import download_dataset, resolve_dataset_root
+try:
+    from .data_pipeline import download_dataset, resolve_dataset_root
+except ImportError:  # Supports ``python data/inspect_data.py`` as well.
+    from data_pipeline import download_dataset, resolve_dataset_root
 
 
 CLASSES = ("NORMAL", "PNEUMONIA")
@@ -42,6 +46,41 @@ def sha256_file(image_path):
         for chunk in iter(lambda: image_file.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def perceptual_hash(image_path):
+    """Return a small average hash for candidate visual-similarity checks."""
+    with Image.open(image_path) as image:
+        gray = image.convert("L").resize((8, 8), Image.Resampling.BILINEAR)
+        pixels = np.asarray(gray, dtype=np.float32).reshape(-1)
+    average = sum(pixels) / len(pixels)
+    return "".join("1" if pixel >= average else "0" for pixel in pixels)
+
+
+def find_perceptual_hash_candidates(paths_by_file):
+    """Group files with identical average hashes as possible near-duplicates.
+
+    This is deliberately a candidate screen: average hashes can collide for
+    unrelated radiographs and can miss visually similar files with different
+    hashes. It is not a leakage or patient-identity test.
+    """
+    by_hash = defaultdict(list)
+    for image_path, split, class_name in paths_by_file:
+        try:
+            by_hash[perceptual_hash(image_path)].append((image_path, split, class_name))
+        except (OSError, ValueError):
+            continue
+
+    candidates = []
+    for digest, entries in by_hash.items():
+        if len(entries) > 1:
+            candidates.append({
+                "hash": digest,
+                "entries": entries,
+                "cross_split": len({split for _, split, _ in entries}) > 1,
+            })
+    candidates.sort(key=lambda group: group["entries"][0][0].as_posix())
+    return candidates
 
 
 def format_counts_text(counts):
@@ -161,6 +200,7 @@ def inspect_dataset(dataset_root, display_samples=False):
                 samples.extend((class_name, path) for path in readable_paths[:SAMPLES_PER_CLASS])
 
     duplicates = find_exact_duplicates(file_records)
+    perceptual_candidates = find_perceptual_hash_candidates(file_records)
     split_counts = {split: Counter() for split in SPLITS}
     for (split, class_name), count in counts.items():
         split_counts[split][class_name] = count
@@ -197,10 +237,17 @@ def inspect_dataset(dataset_root, display_samples=False):
         print(f"  - {len(group['entries'])} copies {cross_label}; splits={', '.join(split_names)}")
         for image_path, split, class_name in group["entries"]:
             print(f"      {image_path.relative_to(dataset_root).as_posix()}")
+    perceptual_cross_split = sum(group["cross_split"] for group in perceptual_candidates)
+    print(
+        f"Perceptual-hash candidate groups: {len(perceptual_candidates)}; "
+        f"candidate groups spanning splits: {perceptual_cross_split} "
+        "(screening only, not confirmed leakage)"
+    )
 
     report = write_report(
         dataset_root, counts, split_counts, formats, dimensions,
         missing_folders, unreadable, duplicates,
+        perceptual_candidates,
     )
     print(f"\nMarkdown report written to: {report}")
 
@@ -209,7 +256,10 @@ def inspect_dataset(dataset_root, display_samples=False):
     return report
 
 
-def write_report(root, counts, split_counts, formats, dimensions, missing, unreadable, duplicates):
+def write_report(
+    root, counts, split_counts, formats, dimensions, missing, unreadable,
+    duplicates, perceptual_candidates,
+):
     report_path = Path(__file__).with_name("dataset_report.md")
     total_counts = Counter()
     for values in split_counts.values():
@@ -254,6 +304,16 @@ def write_report(root, counts, split_counts, formats, dimensions, missing, unrea
             )
     else:
         lines.append("- None found.")
+    perceptual_cross_split = sum(group["cross_split"] for group in perceptual_candidates)
+    lines.extend([
+        "",
+        "## Day 2 perceptual-hash screening",
+        "",
+        f"A lightweight 8 × 8 average hash produced **{len(perceptual_candidates)} candidate group(s)**, "
+        f"including **{perceptual_cross_split} candidate group(s) spanning splits**. These are screening "
+        "results only: average-hash collisions are possible, and this method cannot establish patient-level "
+        "separation or detect every visually similar image.",
+    ])
     lines.extend(["", "## Folder checks", ""])
     if missing:
         lines.append("Missing expected folders:")
@@ -269,6 +329,9 @@ def write_report(root, counts, split_counts, formats, dimensions, missing, unrea
         "- The loader exposes train and validation by default; the test loader is opt-in for final evaluation only.",
         "- Duplicate findings are reports only. The existing splits are retained unchanged.",
         "- Team should review any cross-split duplicates before model evaluation; do not alter splits without agreement.",
+        "- Day 2 handoff: Anurag and Suraj should confirm that 224 × 224 RGB inputs, values in [0, 1], and no initial random augmentation match their model expectations before training.",
+        "- Data utilities are organized under `data/`; the root `data.py` is only a compatibility wrapper.",
+        "- No scratch-CNN or transfer-learning model files were present, so model-specific compatibility was not tested. The documented loader contract is `[batch, 3, 224, 224]` float32 images and `[batch]` labels.",
         "- Local Windows loader verification was blocked by an Application Control policy preventing PyTorch's native `torch._C` DLL from loading. The recorded Google Colab verification produced image shape `[4, 3, 224, 224]`, `float32` tensors with values in `[0, 1]`, and label shape `[4]`; that run exposed only `train` and `val` by default, with test loading opt-in and not verified there.",
         "",
     ])

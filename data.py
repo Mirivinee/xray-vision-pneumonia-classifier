@@ -1,10 +1,10 @@
-"""Backward-compatible command-line entry point for dataset download.
+"""Backward-compatible root entry point for downloading the dataset.
 
-New code should import from :mod:`data_pipeline`. This wrapper preserves the
-existing ``python data.py`` command for teammates who already use it.
+The implementation now lives in ``data/data_pipeline.py``. This small wrapper
+preserves the existing ``python data.py`` command for teammates.
 """
 
-from data_pipeline import (
+from data.data_pipeline import (
     CLASS_TO_LABEL,
     DATASET_ID,
     SPLITS,
