@@ -27,7 +27,10 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from data import create_data_loaders, download_dataset, resolve_dataset_root
-from scratch_cnn import ScratchCNN
+try:
+    from .scratch_cnn import ScratchCNN
+except ImportError:  # Supports running this file directly as a script.
+    from scratch_cnn import ScratchCNN
 
 
 def set_seed(seed):

@@ -11,6 +11,8 @@ __pycache__/
 /data/datasets/
 /data/cache/
 /data/kagglehub/
+/data/processed/
+/outputs/
 /dataset/
 /datasets/
 /.cache/
@@ -29,3 +31,8 @@ kaggle.json
 *.pth
 *.ckpt
 *.onnx
+*.log
+**/runs/
+**/reports/
+**/outputs/
+/experiments/data_split_and_imbalance/manifests/

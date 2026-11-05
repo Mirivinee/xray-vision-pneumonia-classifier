@@ -84,7 +84,35 @@ print(labels.shape)  # torch.Size([32])
 
 The label mapping is `NORMAL = 0`, `PNEUMONIA = 1`. The default preprocessing converts every image to RGB, resizes it deterministically to 224 × 224 with bilinear interpolation, and scales the tensor to `[0, 1]`. No random augmentation is included yet. `create_data_loaders` returns `train` and `val`; add `include_test=True` only for final evaluation. Keep test data out of tuning, threshold selection, and model selection.
 
-The default batch contract is `[batch, 3, 224, 224]` with `float32` image tensors and a `[batch]` integer-label tensor. `image_size` remains configurable. Anurag and Suraj should confirm that 224 × 224 RGB inputs, `[0, 1]` scaling, and the absence of initial random augmentation match their scratch-CNN and transfer-learning expectations before training. No model source files are currently present in this repository, so model-specific compatibility has not been tested here.
+## Shared preparation pipeline
+
+The combined pipeline is implemented in `data/preparation_pipeline.py`; `experiments/data_split_and_imbalance/split_data.py` remains a compatibility command. It checks readability, proposes same-class SHA-256 duplicates, retains report-only average-hash candidates, and on explicit apply quarantines exact copies before creating the shared stratified manifest. RGB and grayscale PNGs are generated under `data/processed/` from that same manifest and share stable image IDs and split assignments. Source images are left in place. Optional image dimensions are handled separately in `data/dimension_handler.py`.
+
+Generated manifests and image variants are local and ignored by Git. Before training on a fresh clone, run the confirmed pipeline apply command below to create the manifest and variants for your own dataset.
+
+From PowerShell, run a dry report first:
+
+```powershell
+$python = ".\.venv\Scripts\python.exe"
+$datasetRoot = Read-Host "Enter dataset root containing train, val, and test"
+& $python .\data\preparation_pipeline.py --dataset-dir $datasetRoot --overwrite-report
+```
+
+Review `data/processed/data_report.txt`. To quarantine exact duplicates, refresh the existing shared manifest, and generate both image variants at 224×224, run:
+
+```powershell
+& $python .\data\preparation_pipeline.py --dataset-dir $datasetRoot --apply --overwrite-manifests --overwrite-report
+```
+
+Confirm the overwrite and quarantine prompts. To preserve dimensions, add `--no-resize`; configure another size with `--image-size WIDTH HEIGHT`. Existing RGB/grayscale outputs are never overwritten; choose a new `--output-dir` or review/remove an old generated output through your own data-management procedure before another apply run.
+
+The default batch contract is `[batch, 3, 224, 224]` with `float32` image tensors and a `[batch]` integer-label tensor. `image_size` remains configurable. The merged scratch CNN in `cnn_scratch/scratch_cnn.py` accepts this format and returns one raw pneumonia logit per image; `experiments/data_split_and_imbalance/` contains manifest-based experiment runners. The experiment handoff uses `BCEWithLogitsLoss` and the same `NORMAL = 0`, `PNEUMONIA = 1` labels. The model documents no channel normalization; the training integration therefore uses the existing RGB resize and `[0, 1]` conversion. Transfer-learning compatibility has not been checked because no transfer-learning model code is present.
+
+For fair comparisons on the existing fixed manifest, use the three experiment commands in [the experiment README](experiments/data_split_and_imbalance/README.md). They keep test data out of training and validation-based selection. Confirm with the model owner that this scratch CNN is the intended baseline, that the documented input scaling is still expected, and whether the default mild rotation for Approach 2 is acceptable.
+
+## Grad-CAM and visual review
+
+Validation-only Grad-CAM tools and the artefact-review checklist are in [experiments/explainability/README.md](experiments/explainability/README.md). The runner uses the saved scratch CNN checkpoint and the existing split manifest; it does not offer the official test split for visualization.
 
 ## Day 2 handoff
 
@@ -92,13 +120,11 @@ Run `data\verify_data_pipeline.py` to check train and validation batches, finite
 
 ## Verified Day 1 findings and limitations
 
-- Train: 1,341 `NORMAL`, 3,875 `PNEUMONIA`.
-- Validation: 8 `NORMAL`, 8 `PNEUMONIA` (16 total; very small validation set).
-- Test: 234 `NORMAL`, 390 `PNEUMONIA`.
-- All 5,856 images were readable JPEGs, with 4,803 distinct dimensions.
-- There were 30 byte-identical duplicate groups, all within one split; none crossed splits.
+- Original-folder inspection recorded 5,824 images: 1,579 `NORMAL` and 4,245 `PNEUMONIA`, across the source folders with counts listed in [data/dataset_report.md](data/dataset_report.md).
+- The current shared 80/10/10 manifest assigns: train 1,263 `NORMAL`/3,396 `PNEUMONIA`; validation 158/425; test 158/424. These are manifest partitions, not the original folder counts.
+- The latest pipeline dry run found 5,824 readable images, 0 unreadable images, and 0 exact duplicate groups. Its average-hash screen found 263 candidate groups; candidates are not confirmed duplicates and are never cleaned automatically.
 - Exact-byte checks do not establish patient-level separation and cannot detect visually identical files saved with different encodings.
-- No dataset images were modified.
+- No source dataset images or existing split manifests were changed during the pipeline dry run.
 
 ## Data safety
 
